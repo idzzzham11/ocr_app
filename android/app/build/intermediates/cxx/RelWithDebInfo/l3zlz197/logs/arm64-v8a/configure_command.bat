@@ -11,10 +11,10 @@
   "-DCMAKE_ANDROID_NDK=C:\\Users\\mohdi\\AppData\\Local\\Android\\sdk\\ndk\\27.0.12077973" ^
   "-DCMAKE_TOOLCHAIN_FILE=C:\\Users\\mohdi\\AppData\\Local\\Android\\sdk\\ndk\\27.0.12077973\\build\\cmake\\android.toolchain.cmake" ^
   "-DCMAKE_MAKE_PROGRAM=C:\\Users\\mohdi\\AppData\\Local\\Android\\sdk\\cmake\\3.22.1\\bin\\ninja.exe" ^
-  "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=C:\\xampp\\htdocs\\test1\\android\\app\\build\\intermediates\\cxx\\RelWithDebInfo\\l3zlz197\\obj\\arm64-v8a" ^
-  "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=C:\\xampp\\htdocs\\test1\\android\\app\\build\\intermediates\\cxx\\RelWithDebInfo\\l3zlz197\\obj\\arm64-v8a" ^
+  "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=C:\\xampp\\htdocs\\ocr_app\\android\\app\\build\\intermediates\\cxx\\RelWithDebInfo\\l3zlz197\\obj\\arm64-v8a" ^
+  "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=C:\\xampp\\htdocs\\ocr_app\\android\\app\\build\\intermediates\\cxx\\RelWithDebInfo\\l3zlz197\\obj\\arm64-v8a" ^
   "-DCMAKE_BUILD_TYPE=RelWithDebInfo" ^
-  "-BC:\\xampp\\htdocs\\test1\\android\\app\\.cxx\\RelWithDebInfo\\l3zlz197\\arm64-v8a" ^
+  "-BC:\\xampp\\htdocs\\ocr_app\\android\\app\\.cxx\\RelWithDebInfo\\l3zlz197\\arm64-v8a" ^
   -GNinja ^
   -Wno-dev ^
   --no-warn-unused-cli

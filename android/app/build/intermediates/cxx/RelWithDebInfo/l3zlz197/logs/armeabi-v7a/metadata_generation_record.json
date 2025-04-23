@@ -14,7 +14,7 @@
   },
   {
     "level_": 0,
-    "message_": "JSON \u0027C:\\xampp\\htdocs\\test1\\android\\app\\.cxx\\RelWithDebInfo\\l3zlz197\\armeabi-v7a\\android_gradle_build.json\u0027 was up-to-date",
+    "message_": "JSON \u0027C:\\xampp\\htdocs\\ocr_app\\android\\app\\.cxx\\RelWithDebInfo\\l3zlz197\\armeabi-v7a\\android_gradle_build.json\u0027 was up-to-date",
     "file_": "C:\\dev\\flutter\\packages\\flutter_tools\\gradle\\src\\main\\groovy\\CMakeLists.txt",
     "tag_": "release|armeabi-v7a",
     "diagnosticCode_": 0,
