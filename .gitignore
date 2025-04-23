@@ -39,6 +39,9 @@ flutter_*.png
 /android/.gradle/
 /android/captures/
 /android/gradle.properties
+android/key.properties
+android/app/key.jks
+
 
 # iOS
 ios/Flutter/Flutter.framework

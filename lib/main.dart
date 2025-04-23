@@ -141,7 +141,7 @@ class _MyHomePageState extends State<MyHomePage> {
   DocumentData? _documentData;
   List<TextEditingController> _headerTextControllers = [];
   List<TextEditingController> _editableTextControllers = [];
-  List<DocumentField> _documentFields = [];
+  final List<DocumentField> _documentFields = [];
 
   void _handlePickedImage(XFile pickedFile) async {
     setState(() {
