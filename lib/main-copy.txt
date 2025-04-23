@@ -1,0 +1,721 @@
+import 'dart:io';
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+// import 'package:file_picker/file_picker.dart';
+// import 'package:image/image.dart' as img;
+// import 'package:syncfusion_flutter_pdf/pdf.dart';
+
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Document Text Extractor',
+      theme: ThemeData(
+        primarySwatch: Colors.deepPurple,
+        useMaterial3: true,
+      ),
+      home: const MyHomePage(title: 'Document Text Extractor'),
+    );
+  }
+}
+
+class MyHomePage extends StatefulWidget {
+  const MyHomePage({super.key, required this.title});
+  final String title;
+
+  @override
+  State<MyHomePage> createState() => _MyHomePageState();
+}
+
+class DocumentData {
+  final String? companyName;
+  final String? location;
+  final String? contactInfo;
+  final String? vehicleNumber;
+  final String? driverIc;
+  final String? driverName;
+  final String? company;
+  final String? trailerNumber;
+  final String? deliveryNote;
+  final String? entryDate;
+  final String? entryTime;
+  final String? exitDate;
+  final String? exitTime;
+  final Map<String, String> additionalFields;
+
+  DocumentData({
+    this.companyName,
+    this.location,
+    this.contactInfo,
+    this.vehicleNumber,
+    this.driverIc,
+    this.driverName,
+    this.company,
+    this.trailerNumber,
+    this.deliveryNote,
+    this.entryDate,
+    this.entryTime,
+    this.exitDate,
+    this.exitTime,
+    this.additionalFields = const {},
+  });
+
+  // Convert to JSON map
+  Map<String, dynamic> toJson() {
+    return {
+      'companyName': companyName,
+      'location': location,
+      'contactInfo': contactInfo,
+      'vehicleNumber': vehicleNumber,
+      'driverIc': driverIc,
+      'driverName': driverName,
+      'company': company,
+      'trailerNumber': trailerNumber,
+      'deliveryNote': deliveryNote,
+      'entryDate': entryDate,
+      'entryTime': entryTime,
+      'exitDate': exitDate,
+      'exitTime': exitTime,
+      'additionalFields': additionalFields,
+    };
+  }
+}
+
+class _MyHomePageState extends State<MyHomePage> {
+  File? _file;
+  String? _extractedText;
+  bool _isImage = false;
+  String? _fileName;
+  bool _isProcessing = false;
+  DocumentData? _documentData;
+  
+  void _handlePickedImage(XFile pickedFile) async {
+    setState(() {
+      _isProcessing = true;
+      _file = File(pickedFile.path);
+      _fileName = pickedFile.name;
+      _isImage = true;
+      _extractedText = null;
+    });
+    
+    await _extractTextFromImage(_file!);
+    
+    setState(() {
+      _isProcessing = false;
+    });
+  }
+
+  Future<void> _pickImage() async {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Wrap(
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Gallery'),
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  final pickedFile = await ImagePicker().pickImage(
+                    source: ImageSource.gallery,
+                    imageQuality: 100,
+                  );
+                  if (pickedFile != null) {
+                    _handlePickedImage(pickedFile);
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Camera'),
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  final pickedFile = await ImagePicker().pickImage(
+                    source: ImageSource.camera,
+                    imageQuality: 100,
+                  );
+                  if (pickedFile != null) {
+                    _handlePickedImage(pickedFile);
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _extractTextFromImage(File imageFile) async {
+  final inputImage = InputImage.fromFilePath(imageFile.path);
+  final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+  
+  try {
+    // Print debug info first
+    print("Processing image: ${imageFile.path}");
+    
+    final recognizedText = await textRecognizer.processImage(inputImage);
+    
+    // Log raw text for debugging
+    // print("Raw OCR text:");
+    // print(recognizedText.text);
+    
+    // Process the recognized text
+    _processExtractedText(recognizedText.text);
+  } catch (e) {
+    setState(() {
+      _extractedText = "Error extracting text: ${e.toString()}";
+    });
+    print("Error in text extraction: $e");
+  } finally {
+    textRecognizer.close();
+  }
+}
+
+  // Future<void> _pickPDF() async {
+  //   final result = await FilePicker.platform.pickFiles(
+  //     type: FileType.custom, 
+  //     allowedExtensions: ['pdf']
+  //   );
+    
+  //   if (result != null && result.files.single.path != null) {
+  //     setState(() {
+  //       _isProcessing = true;
+  //       _file = File(result.files.single.path!);
+  //       _fileName = result.files.single.name;
+  //       _isImage = false;
+  //       _extractedText = null;
+  //     });
+      
+  //     await _extractTextFromPDF(_file!);
+      
+  //     setState(() {
+  //       _isProcessing = false;
+  //     });
+  //   }
+  // }
+
+  // Future<void> _extractTextFromPDF(File pdfFile) async {
+  //   try {
+  //     final bytes = await pdfFile.readAsBytes();
+  //     final document = PdfDocument(inputBytes: bytes);
+
+  //     // Extract raw text from all pages
+  //     String rawText = '';
+  //     for (int i = 0; i < document.pages.count; i++) {
+  //       rawText += PdfTextExtractor(document).extractText(startPageIndex: i, endPageIndex: i);
+  //     }
+  //     document.dispose();
+
+  //     // Process the extracted text
+  //     _processExtractedText(rawText);
+  //   } catch (e) {
+  //     setState(() {
+  //       _extractedText = "Error extracting text from PDF: ${e.toString()}";
+  //     });
+  //   }
+  // }
+
+  void _processExtractedText(String text) {
+  final List<String> lines = text
+      .split('\n')
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty)
+      .toList();
+
+  // Debug: print lines with line numbers (only for debugging, won't affect output)
+  print("==== RAW OCR TEXT LINES ====");
+  for (int i = 0; i < lines.length; i++) {
+    print('[${i}] ${lines[i]}');
+  }
+
+  // Create output with the same structure but without line numbers
+  List<String> output = [];
+  
+  // Add header information
+  if (lines.length > 26) output.add(getValueAtLine(lines, 26));
+  if (lines.length > 2) output.add(getValueAtLine(lines, 2));
+  if (lines.length > 3) output.add(getValueAtLine(lines, 3));
+  if (lines.length > 4) output.add(getValueAtLine(lines, 4));
+  if (lines.length > 5) output.add(getValueAtLine(lines, 5));
+  output.add("");
+  if (lines.length > 18) output.add(getValueAtLine(lines, 18));
+  output.add("-------------------------");
+  
+  // Vehicle number - extract and format with colon
+  String? vehicleNumber;
+  if (lines.length > 6) {
+    String line = getValueAtLine(lines, 6);
+    // Check if the line contains the vehicle number label
+    if (line.contains("NOMBOR KENDERAAN")) {
+      // Extract everything after the label
+      final match = RegExp(r'NOMBOR KENDERAAN\s*:?[\s]*([A-Z0-9]+)').firstMatch(line);
+      if (match != null) {
+        String value = match.group(1) ?? "";
+        vehicleNumber = value;
+        output.add("NOMBOR KENDERAAN: $value");
+      } else {
+        vehicleNumber = line.replaceAll("NOMBOR KENDERAAN", "").trim();
+        output.add(line); // fallback
+      }
+    } else {
+      output.add(line);
+    }
+  }
+
+  // IC number - combine with value
+  String? driverIc;
+  if (lines.length > 7) {
+    String label = getValueAtLine(lines, 7);
+    driverIc = lines.length > 16 ? getValueAtLine(lines, 16) : "";
+    output.add("$label: $driverIc");
+  }
+  
+  // Driver name - combine with value
+  String? driverName;
+  if (lines.length > 8) {
+    String label = getValueAtLine(lines, 8);
+    driverName = lines.length > 19 ? getValueAtLine(lines, 19) : "";
+    output.add("$label: $driverName");
+  }
+  
+  // Company - combine with value
+  String? company;
+  if (lines.length > 9) {
+    String label = getValueAtLine(lines, 9);
+    company = lines.length > 20 ? getValueAtLine(lines, 20) : "";
+    output.add("$label: $company");
+  }
+  
+  // Trailer number - combine with value
+  String? trailerNumber;
+  if (lines.length > 28) {
+    String label = getValueAtLine(lines, 28);
+    trailerNumber = lines.length > 29 ? getValueAtLine(lines, 29) : "";
+    output.add("$label: $trailerNumber");
+  }
+  
+  // Delivery note - extract and format with colon
+  String? deliveryNote;
+  if (lines.length > 30) {
+    String line = getValueAtLine(lines, 30);
+    // Check if the line is the delivery note line
+    if (line.contains("NOTA HANTARAN") || line.contains("ARAHAN ANGKUT")) {
+      // Split the line into label and value parts
+      List<String> parts = line.split(RegExp(r'\s{2,}'));
+      String label = parts[0].trim();
+      deliveryNote = parts.length > 1 ? parts[1].trim() : "";
+      output.add("$label: $deliveryNote");
+    } else {
+      output.add(line);
+    }
+  }
+  
+  // Entry date - combine with value
+  String? entryDate;
+  if (lines.length > 10) {
+    String label = getValueAtLine(lines, 10);
+    entryDate = lines.length > 21 ? getValueAtLine(lines, 21) : "";
+    output.add("$label: $entryDate");
+  }
+  
+  // Entry time - combine with value
+  String? entryTime;
+  if (lines.length > 11) {
+    String label = getValueAtLine(lines, 11);
+    entryTime = lines.length > 23 ? getValueAtLine(lines, 23) : "";
+    output.add("$label: $entryTime");
+  }
+  
+  // Exit date
+  String? exitDate;
+  if (lines.length > 12) {
+    String line = getValueAtLine(lines, 12);
+    exitDate = line.replaceAll("TARIKH KELUAR", "").trim();
+    output.add(line);
+  }
+  
+  // Exit time
+  String? exitTime;
+  if (lines.length > 13) {
+    String line = getValueAtLine(lines, 13);
+    exitTime = line.replaceAll("MASA KELUAR", "").trim();
+    output.add(line);
+  }
+  
+  // Additional fields - add them with proper formatting
+  Map<String, String> additionalFields = {};
+  
+  if (lines.length > 31) {
+    String line = getValueAtLine(lines, 31);
+    output.add(line);
+    if (line.contains(":")) {
+      List<String> parts = line.split(":");
+      additionalFields[parts[0].trim()] = parts.length > 1 ? parts[1].trim() : "";
+    }
+  }
+  
+  if (lines.length > 31 && lines.length > 36) {
+    output.add("(P/T)");
+    additionalFields["(P/T)"] = "";
+  }
+  
+  if (lines.length > 43) {
+    String line = getValueAtLine(lines, 43);
+    output.add(line);
+    if (line.contains(":")) {
+      List<String> parts = line.split(":");
+      additionalFields[parts[0].trim()] = parts.length > 1 ? parts[1].trim() : "";
+    }
+  }
+  
+  if (lines.length > 32) {
+    String line = getValueAtLine(lines, 32);
+    output.add(line);
+    if (line.contains(":")) {
+      List<String> parts = line.split(":");
+      additionalFields[parts[0].trim()] = parts.length > 1 ? parts[1].trim() : "";
+    }
+  }
+  
+  if (lines.length > 36 && lines.length > 45) {
+    output.add("(P/T)");
+    additionalFields["(P/T) 2"] = "";
+  }
+  
+  if (lines.length > 45) {
+    String line = getValueAtLine(lines, 45);
+    output.add(line);
+    if (line.contains(":")) {
+      List<String> parts = line.split(":");
+      additionalFields[parts[0].trim()] = parts.length > 1 ? parts[1].trim() : "";
+    }
+  }
+  
+  if (lines.length > 33) {
+    String line = getValueAtLine(lines, 33);
+    output.add(line);
+    if (line.contains(":")) {
+      List<String> parts = line.split(":");
+      additionalFields[parts[0].trim()] = parts.length > 1 ? parts[1].trim() : "";
+    }
+  }
+  
+  if (lines.length > 37) {
+    String line = getValueAtLine(lines, 37);
+    output.add(line);
+    if (line.contains(":")) {
+      List<String> parts = line.split(":");
+      additionalFields[parts[0].trim()] = parts.length > 1 ? parts[1].trim() : "";
+    }
+  }
+  
+  if (lines.length > 46) {
+    String line = getValueAtLine(lines, 46);
+    output.add(line);
+    if (line.contains(":")) {
+      List<String> parts = line.split(":");
+      additionalFields[parts[0].trim()] = parts.length > 1 ? parts[1].trim() : "";
+    }
+  }
+  
+  if (lines.length > 34) {
+    String line = getValueAtLine(lines, 34);
+    output.add(line);
+    if (line.contains(":")) {
+      List<String> parts = line.split(":");
+      additionalFields[parts[0].trim()] = parts.length > 1 ? parts[1].trim() : "";
+    }
+  }
+  
+  if (lines.length > 38) {
+    String line = getValueAtLine(lines, 38);
+    output.add(line);
+    if (line.contains(":")) {
+      List<String> parts = line.split(":");
+      additionalFields[parts[0].trim()] = parts.length > 1 ? parts[1].trim() : "";
+    }
+  }
+  
+  if (lines.length > 50) {
+    String line = getValueAtLine(lines, 50);
+    output.add(line);
+    if (line.contains(":")) {
+      List<String> parts = line.split(":");
+      additionalFields[parts[0].trim()] = parts.length > 1 ? parts[1].trim() : "";
+    }
+  }
+  
+  // Extract header information for JSON structure
+  String? companyName = lines.length > 2 ? getValueAtLine(lines, 2) : null;
+  String? location = lines.length > 2 ? 
+      "${getValueAtLine(lines, 2)}\n${getValueAtLine(lines, 3)}\n${getValueAtLine(lines, 4)}" : null;
+  String? contactInfo = lines.length > 5 ? getValueAtLine(lines, 5) : null;
+  
+  // Create the DocumentData object
+  _documentData = DocumentData(
+    companyName: companyName,
+    location: location,
+    contactInfo: contactInfo,
+    vehicleNumber: vehicleNumber,
+    driverIc: driverIc,
+    driverName: driverName,
+    company: company,
+    trailerNumber: trailerNumber,
+    deliveryNote: deliveryNote,
+    entryDate: entryDate,
+    entryTime: entryTime,
+    exitDate: exitDate,
+    exitTime: exitTime,
+    additionalFields: additionalFields,
+  );
+  
+  setState(() {
+    _extractedText = output.join('\n');
+  });
+
+  // Debug: Print formatted output (only for debugging)
+  print("==== FORMATTED OUTPUT ====");
+  output.forEach((line) => print(line));
+}
+
+// Helper function to safely get value at specific line and remove colons
+String getValueAtLine(List<String> lines, int index) {
+  if (index < 0 || index >= lines.length) return '';
+  String line = lines[index].trim();
+  // Check if the line contains a colon and remove it
+  if (line.contains(':')) {
+    line = line.replaceAll(':', '');
+  }
+  return line;
+}
+
+// Clean line function - removes unnecessary characters and formatting
+String cleanLine(String line) {
+  // Remove line numbers if present
+  line = line.replaceAll(RegExp(r'^\[\d+\]\s*'), '');
+  return line.trim();
+}
+
+  void _copyToClipboard() {
+    if (_extractedText != null && _extractedText!.isNotEmpty) {
+      Clipboard.setData(ClipboardData(text: _extractedText!));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Text copied to clipboard')),
+      );
+    }
+  }
+
+  Future<void> _saveAsJson() async {
+  if (_documentData == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No data to save')),
+    );
+    return;
+  }
+  
+  // Convert the document data to a JSON map
+  final jsonMap = _documentData!.toJson();
+  
+  // Convert to a prettified JSON string for display in debug console
+  final JsonEncoder encoder = JsonEncoder.withIndent('  ');
+  final String prettyJson = encoder.convert(jsonMap);
+  
+  // Print the JSON to the debug console
+  print("==== DOCUMENT JSON DATA ====");
+  print(prettyJson);
+  
+  // Create JSON string for saving
+  final jsonString = jsonEncode(jsonMap);
+  
+  // Get the temporary directory
+  final directory = await getTemporaryDirectory();
+  final timestamp = DateTime.now().millisecondsSinceEpoch;
+  final fileName = 'document_data_$timestamp.json';
+  final filePath = '${directory.path}/$fileName';
+  
+  // Write the JSON to a file
+  final file = File(filePath);
+  await file.writeAsString(jsonString, flush: true);
+  
+  // Share the file
+  await Share.shareXFiles(
+    [XFile(filePath)],
+    text: 'Document Data JSON',
+  );
+  
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('JSON file created and shared')),
+  );
+}
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          if (_extractedText != null && _extractedText!.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.copy),
+              onPressed: _copyToClipboard,
+              tooltip: 'Copy text',
+            ),
+          if (_documentData != null)
+            IconButton(
+              icon: const Icon(Icons.save_alt),
+              onPressed: _saveAsJson,
+              tooltip: 'Save as JSON',
+            ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Center(
+                  child: SizedBox(
+                    width: 180, // adjust width as needed
+                    height: 45, // adjust height as needed
+                    child: ElevatedButton.icon(
+                      onPressed: _pickImage,
+                      icon: const Icon(Icons.document_scanner),
+                      label: const Text('Scan Document'),
+                      style: ElevatedButton.styleFrom(
+                        textStyle: const TextStyle(fontSize: 14),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            
+            if (_file != null && _isImage)
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                      child: Image.file(_file!, fit: BoxFit.cover),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(
+                        'File: $_fileName',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            
+            if (_file != null && !_isImage)
+              Card(
+                margin: const EdgeInsets.only(bottom: 16),
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.picture_as_pdf, size: 28, color: Colors.red),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'File: $_fileName',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            
+            if (_isProcessing)
+              const Center(
+                child: Column(
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text("Processing document..."),
+                  ],
+                ),
+              )
+            else ...[
+              const Text(
+                "Extracted Text:", 
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: SelectableText(
+                  _extractedText ?? 'No text extracted yet. Scan a document.',
+                  style: const TextStyle(fontSize: 15, height: 1.5),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      floatingActionButton: _extractedText != null && _extractedText!.isNotEmpty
+        ? Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FloatingActionButton(
+              onPressed: _copyToClipboard,
+              tooltip: 'Copy Text',
+              heroTag: 'copy',
+              child: const Icon(Icons.content_copy),
+            ),
+            const SizedBox(height: 16),
+            FloatingActionButton(
+              onPressed: _saveAsJson,
+              tooltip: 'Save as JSON',
+              heroTag: 'json',
+              backgroundColor: Colors.green,
+              child: const Icon(Icons.code),
+            ),
+          ],
+        )
+      : null,
+    );
+  }
+}
+
+// Helper function
+int min(int a, int b) => a < b ? a : b;
