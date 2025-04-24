@@ -35,6 +35,11 @@ migrate_working_dir/
 /build/
 flutter_*.png
 
+lib/main-copy.txt
+lib/main-copy 2.txt
+lib/main-copy 3.txt
+lib/main-copy 4.txt
+
 # Android
 /android/.gradle/
 /android/captures/

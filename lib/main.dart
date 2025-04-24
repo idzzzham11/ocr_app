@@ -141,7 +141,6 @@ class _MyHomePageState extends State<MyHomePage> {
   DocumentData? _documentData;
   List<TextEditingController> _headerTextControllers = [];
   List<TextEditingController> _editableTextControllers = [];
-  final List<DocumentField> _documentFields = [];
 
   void _handlePickedImage(XFile pickedFile) async {
     setState(() {
@@ -201,7 +200,7 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
- // Optimized _extractTextFromImage function
+  // Optimized _extractTextFromImage function
   Future<void> _extractTextFromImage(File imageFile) async {
     final inputImage = InputImage.fromFilePath(imageFile.path);
     final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
@@ -219,286 +218,271 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-List<String> preprocessOcrLines(List<String> rawLines) {
-  // Log raw input with less string concatenation
-  debugPrint("==== RAW OCR LINES ====");
-  for (int i = 0; i < rawLines.length; i++) {
-    debugPrint('[$i] ${rawLines[i]}');
-  }
-  
-  // First, identify any lines that contain field:value pairs
-  final structuredLines = <Map<String, dynamic>>[];
-  
-  for (int i = 0; i < rawLines.length; i++) {
-    final line = rawLines[i];
-    
-    // Check if this is a field:value pair
-    if (line.contains(':')) {
-      final colonIndex = line.indexOf(':');
-      final field = line.substring(0, colonIndex).trim();
-      final value = line.substring(colonIndex + 1).trim();
-      
-      structuredLines.add({
-        'lineIndex': i,
-        'type': 'field',
-        'original': line,
-        'field': field,
-        'value': value,
-        'colonPos': colonIndex,
-      });
-    } else {
-      // If not a field:value pair, it could be just a field name or just a value
-      final isLikelyFieldName = isFieldNamePattern(line);
-      
-      structuredLines.add({
-        'lineIndex': i,
-        'type': isLikelyFieldName ? 'potentialField' : 'text',
-        'original': line,
-      });
+  List<String> preprocessOcrLines(List<String> rawLines) {
+    // Log raw input with less string concatenation
+    debugPrint("==== RAW OCR LINES ====");
+    for (int i = 0; i < rawLines.length; i++) {
+      debugPrint('[$i] ${rawLines[i]}');
     }
-  }
   
-  // Process structured lines to improve field-value associations
-  final improved = <String>[];
+    // First, identify any lines that contain field:value pairs
+    final structuredLines = <Map<String, dynamic>>[];
   
-  // First, add all complete field:value pairs
-  for (final item in structuredLines) {
-    if (item['type'] == 'field' && item['value'].isNotEmpty) {
-      improved.add('${item['field']}: ${item['value']}');
-    }
-  }
-  
-  // Now handle potential field names without values
-  for (int i = 0; i < structuredLines.length; i++) {
-    final current = structuredLines[i];
-    
-    // If this is a field without a value, try to find a matching value
-    if (current['type'] == 'field' && current['value'].isEmpty) {
-      final fieldName = current['field'];
-      bool valueFound = false;
+    for (int i = 0; i < rawLines.length; i++) {
+      final line = rawLines[i];
       
-      // Look ahead at the next line to find a potential value
-      if (i + 1 < structuredLines.length) {
-        final next = structuredLines[i + 1];
+      // Check if this is a field:value pair
+      if (line.contains(':')) {
+        final colonIndex = line.indexOf(':');
+        final field = line.substring(0, colonIndex).trim();
+        final value = line.substring(colonIndex + 1).trim();
         
-        // If next item is plain text (not a field), it might be our value
-        if (next['type'] == 'text') {
-          improved.add('$fieldName: ${next['original']}');
-          valueFound = true;
-          // Skip this item in the next iteration since we used it
-          structuredLines[i + 1]['processed'] = true;
-        }
+        structuredLines.add({
+          'lineIndex': i,
+          'type': 'field',
+          'original': line,
+          'field': field,
+          'value': value,
+          'colonPos': colonIndex,
+        });
+      } else {
+        // If not a field:value pair, it could be just a field name or just a value
+        final isLikelyFieldName = isFieldNamePattern(line);
+        
+        structuredLines.add({
+          'lineIndex': i,
+          'type': isLikelyFieldName ? 'potentialField' : 'text',
+          'original': line,
+        });
       }
+    }
+  
+    // Process structured lines to improve field-value associations
+    final improved = <String>[];
+    
+    // First, add all complete field:value pairs
+    for (final item in structuredLines) {
+      if (item['type'] == 'field' && item['value'].isNotEmpty) {
+        improved.add('${item['field']}: ${item['value']}');
+      }
+    }
+  
+    // Now handle potential field names without values
+    for (int i = 0; i < structuredLines.length; i++) {
+      final current = structuredLines[i];
       
-      // If no value found using the next line, try spatial matching
-      if (!valueFound) {
-        // Find values that might match based on column position
-        final colonPos = current['colonPos'] as int;
+      // If this is a field without a value, try to find a matching value
+      if (current['type'] == 'field' && current['value'].isEmpty) {
+        final fieldName = current['field'];
+        bool valueFound = false;
         
-        // Look for values with similar column position
-        for (int j = 0; j < structuredLines.length; j++) {
-          if (i == j || structuredLines[j]['processed'] == true) continue;
+        // Look ahead at the next line to find a potential value
+        if (i + 1 < structuredLines.length) {
+          final next = structuredLines[i + 1];
           
-          final other = structuredLines[j];
-          
-          // If this is a field:value pair with a value and similar column position
-          if (other['type'] == 'field' && 
-              other['value'].isNotEmpty && 
-              other['colonPos'] != null &&
-              (other['colonPos'] - colonPos).abs() < 5) {
-            
-            improved.add('$fieldName: ${other['value']}');
+          // If next item is plain text (not a field), it might be our value
+          if (next['type'] == 'text') {
+            improved.add('$fieldName: ${next['original']}');
             valueFound = true;
-            break;
+            // Skip this item in the next iteration since we used it
+            structuredLines[i + 1]['processed'] = true;
           }
         }
-      }
       
-      // If still no value found, add as field name without value
-      if (!valueFound) {
-        improved.add('$fieldName: Not Detected');
-      }
-    }
-  }
-  
-  // Process potential field names (lines that look like field names but don't have colons)
-  for (int i = 0; i < structuredLines.length; i++) {
-    final current = structuredLines[i];
-    
-    if (current['type'] == 'potentialField' && current['processed'] != true) {
-      final potentialField = current['original'];
-      bool valueFound = false;
-      
-      // Look at the next line to find a potential value
-      if (i + 1 < structuredLines.length) {
-        final next = structuredLines[i + 1];
-        
-        // If next item is plain text (not a field), it might be our value
-        if (next['type'] == 'text' && next['processed'] != true) {
-          improved.add('$potentialField: ${next['original']}');
-          valueFound = true;
-          // Mark as processed
-          structuredLines[i + 1]['processed'] = true;
-        }
-      }
-      
-      // If no value found, add field without value
-      if (!valueFound) {
-        // Only add if it's a known field pattern
-        if (isKnownFieldPattern(potentialField)) {
-          improved.add('$potentialField: Not Detected');
-        } else {
-          // Otherwise just add the text as is
-          improved.add(potentialField);
-        }
-      }
-    }
-    // Add remaining text lines that haven't been processed
-    else if (current['type'] == 'text' && current['processed'] != true) {
-      improved.add(current['original']);
-    }
-  }
-  
-  // Add known fields that might be missing
-  final requiredFields = <String>[
-    'NOMBOR KENDERAAN',
-    'K.P. PEMANDU',
-    'NAMA PEMANDU',
-    'SYARIKAT',
-  ];
-
-  for (final field in requiredFields) {
-    final fieldPrefix = '${field.toUpperCase()}:';
-    bool found = improved.any((line) => line.toUpperCase().startsWith(fieldPrefix));
-    if (!found) {
-      improved.add('$field: Not Detected');
-    }
-  }
-  
-  // Log the preprocessed result
-  debugPrint("==== PREPROCESSED OCR LINES ====");
-  for (int i = 0; i < improved.length; i++) {
-    debugPrint('[$i] ${improved[i]}');
-  }
-  
-  return improved;
-}
-
-// Check if a string matches common field name patterns
-bool isFieldNamePattern(String text) {
-  // Common field name patterns - use a Set for faster lookups
-  final fieldPatterns = <String>{
-    'NOMBOR', 'NAMA', 'K.P.', 'SYARIKAT', 'TARIKH', 'MASA', 
-    'KOD', 'SUB', 'TRAILER', 'NOTA', 'DRIVER', 'COMPANY',
-    'ENTRY', 'EXIT', 'DATE', 'TIME', 'VEHICLE'
-  };
-  
-  final upperText = text.toUpperCase();
-  return fieldPatterns.any((pattern) => upperText.contains(pattern));
-}
-
-// Check if a string is a known important field name
-bool isKnownFieldPattern(String text) {
-  // List of known important field names - use a Set for faster lookups
-  final knownFields = <String>{
-    'NOMBOR KENDERAAN', 'NO. KENDERAAN', 'NO KENDERAAN',
-    'K.P. PEMANDU', 'NO. K/P', 'IC NO', 'K.P PEMANDU',
-    'NAMA PEMANDU', 'PEMANDU',
-    'SYARIKAT', 'COMPANY',
-    'NOMBOR TRAILER', 'NO. TRAILER', 'TRAILER',
-    'NOTA HANTARAN', 'ARAHAN ANGKUT',
-    'TARIKH MASUK', 'ENTRY DATE',
-    'MASA MASUK', 'ENTRY TIME',
-    'TARIKH KELUAR', 'EXIT DATE',
-    'MASA KELUAR', 'EXIT TIME',
-    'MUDA', 'LAMA', 'PERAM', 'DURA', 'MENGKAL', 'KOSONG', 
-    'PANJANG', 'BUSUK', 'KOTOR', 'S/TIKUS', 'P/T', 'BAS', 'MENG'
-  };
-  
-  final upperText = text.toUpperCase();
-  return knownFields.any((field) => upperText.contains(field));
-}
-
-// Helper function to check if a string contains any field name
-bool containsAnyFieldName(String text, Map<String, List<String>> fieldMappings) {
-  final upperText = text.toUpperCase();
-  
-  for (final fieldNames in fieldMappings.values) {
-    for (final fieldName in fieldNames) {
-      if (upperText.contains(fieldName.toUpperCase())) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-// Optimized extractKeyFields function
-Map<String, String> extractKeyFields(List<String> rawLines) {
-  final result = <String, String>{};
-  
-  // Define the key fields we need to extract with their possible variations
-  // Use a Map with String keys for better lookup performance
-  final keyFieldMappings = {
-    'NOMBOR KENDERAAN': ['NOMBOR KENDERAAN', 'NO. KENDERAAN', 'NO KENDERAAN', 'NOMBOR KENDERAAN :'],
-    'K.P. PEMANDU': ['K.P. PEMANDU', 'NO. K/P', 'IC NO', 'K.P PEMANDU', 'K.P. PEMANDU :'],
-    'NAMA PEMANDU': ['NAMA PEMANDU', 'NAMA PEMANDU :'],
-    'SYARIKAT': ['SYARIKAT', 'COMPANY', 'SYARIKAT :'],
-    'NOMBOR TRAILER': ['NOMBOR TRAILER', 'NO. TRAILER', 'TRAILER', 'NOMBOR TRAILER :'],
-    'NOTA HANTARAN/ARAHAN ANGKUT': ['NOTA HANTARAN/ARAHAN ANGKUT', 'NOTA HANTARAN', 'ARAHAN ANGKUT', 'NOTA HANTARAN :'],
-    'TARIKH MASUK': ['TARIKH MASUK', 'ENTRY DATE', 'TARIKH MASUK :'],
-    'MASA MASUK': ['MASA MASUK', 'ENTRY TIME', 'MASA MASUK :']
-  };
-  
-  // Initialize all fields to empty string at once
-  for (var key in keyFieldMappings.keys) {
-    result[key] = '';
-  }
-  
-  // Cache regular expressions for better performance
-  final vehicleRegex = RegExp(r'W[A-Z][0-9]{3,4}[A-Z]?');
-  final icRegex = RegExp(r'[0-9]{12}');
-  final dateRegex = RegExp(r'\d{2}/\d{2}/\d{4}');
-  final timeRegex = RegExp(r'\d{2}:\d{2}:\d{2}');
-  final deliveryNoteRegex = RegExp(r'^\d{4}$');
-  final trailerRegex = RegExp(r'T/[A-Z][0-9]{3,5}');
-  
-  // Convert raw lines to uppercase once for better performance
-  final upperLines = List<String>.generate(
-    rawLines.length, 
-    (index) => rawLines[index].toUpperCase()
-  );
-  
-  // First pass: Look for exact field:value patterns
-  for (int i = 0; i < rawLines.length; i++) {
-    final line = rawLines[i];
-    final upperLine = upperLines[i];
-    
-    // Scan each line for multiple field patterns at once
-    for (final field in keyFieldMappings.keys) {
-      for (final pattern in keyFieldMappings[field]!) {
-        final upperPattern = pattern.toUpperCase();
-        
-        // Case 1: Pattern followed by colon and value
-        final searchPattern = '$upperPattern:';
-        int patternIndex = upperLine.indexOf(searchPattern);
-        if (patternIndex >= 0) {
-          final valueStartIdx = patternIndex + searchPattern.length;
+        // If no value found using the next line, try spatial matching
+        if (!valueFound) {
+          // Find values that might match based on column position
+          final colonPos = current['colonPos'] as int;
           
-          if (valueStartIdx < line.length) {
-            final value = line.substring(valueStartIdx).trim();
-            if (value.isNotEmpty) {
-              result[field] = value;
+          // Look for values with similar column position
+          for (int j = 0; j < structuredLines.length; j++) {
+            if (i == j || structuredLines[j]['processed'] == true) continue;
+            
+            final other = structuredLines[j];
+            
+            // If this is a field:value pair with a value and similar column position
+            if (other['type'] == 'field' && 
+                other['value'].isNotEmpty && 
+                other['colonPos'] != null &&
+                (other['colonPos'] - colonPos).abs() < 5) {
+              
+              improved.add('$fieldName: ${other['value']}');
+              valueFound = true;
               break;
             }
           }
         }
-        // Case 2: Pattern and colon are together without space
-        else {
-          final patternWithoutSpace = '${upperPattern.replaceAll(' :', ':')}:';
-          patternIndex = upperLine.indexOf(patternWithoutSpace);
+      
+        // If still no value found, add as field name without value
+        if (!valueFound) {
+          improved.add('$fieldName: Not Detected');
+        }
+      }
+    }
+  
+    // Process potential field names (lines that look like field names but don't have colons)
+    for (int i = 0; i < structuredLines.length; i++) {
+      final current = structuredLines[i];
+      
+      if (current['type'] == 'potentialField' && current['processed'] != true) {
+        final potentialField = current['original'];
+        bool valueFound = false;
+        
+        // Look at the next line to find a potential value
+        if (i + 1 < structuredLines.length) {
+          final next = structuredLines[i + 1];
+          
+          // If next item is plain text (not a field), it might be our value
+          if (next['type'] == 'text' && next['processed'] != true) {
+            improved.add('$potentialField: ${next['original']}');
+            valueFound = true;
+            // Mark as processed
+            structuredLines[i + 1]['processed'] = true;
+          }
+        }
+      
+        // If no value found, add field without value
+        if (!valueFound) {
+          // Only add if it's a known field pattern
+          if (isKnownFieldPattern(potentialField)) {
+            improved.add('$potentialField: Not Detected');
+          } else {
+            // Otherwise just add the text as is
+            improved.add(potentialField);
+          }
+        }
+      }
+      // Add remaining text lines that haven't been processed
+      else if (current['type'] == 'text' && current['processed'] != true) {
+        improved.add(current['original']);
+      }
+    }
+  
+    // Add known fields that might be missing
+    final requiredFields = <String>[
+      'NOMBOR KENDERAAN',
+      'K.P. PEMANDU',
+      'NAMA PEMANDU',
+      'SYARIKAT',
+    ];
+
+    for (final field in requiredFields) {
+      final fieldPrefix = '${field.toUpperCase()}:';
+      bool found = improved.any((line) => line.toUpperCase().startsWith(fieldPrefix));
+      if (!found) {
+        improved.add('$field: Not Detected');
+      }
+    }
+  
+    // Log the preprocessed result
+    debugPrint("==== PREPROCESSED OCR LINES ====");
+    for (int i = 0; i < improved.length; i++) {
+      debugPrint('[$i] ${improved[i]}');
+    }
+  
+    return improved;
+  }
+
+  // Check if a string matches common field name patterns
+  bool isFieldNamePattern(String text) {
+    // Common field name patterns - use a Set for faster lookups
+    final fieldPatterns = <String>{
+      'NOMBOR', 'NAMA', 'K.P.', 'SYARIKAT', 'TARIKH', 'MASA', 
+      'KOD', 'SUB', 'TRAILER', 'NOTA', 'DRIVER', 'COMPANY',
+      'ENTRY', 'EXIT', 'DATE', 'TIME', 'VEHICLE'
+    };
+    
+    final upperText = text.toUpperCase();
+    return fieldPatterns.any((pattern) => upperText.contains(pattern));
+  }
+
+  // Check if a string is a known important field name
+  bool isKnownFieldPattern(String text) {
+    // List of known important field names - use a Set for faster lookups
+    final knownFields = <String>{
+      'NOMBOR KENDERAAN', 'NO. KENDERAAN', 'NO KENDERAAN',
+      'K.P. PEMANDU', 'NO. K/P', 'IC NO', 'K.P PEMANDU',
+      'NAMA PEMANDU', 'PEMANDU',
+      'SYARIKAT', 'COMPANY',
+      'NOMBOR TRAILER', 'NO. TRAILER', 'TRAILER',
+      'NOTA HANTARAN', 'ARAHAN ANGKUT',
+      'TARIKH MASUK', 'ENTRY DATE',
+      'MASA MASUK', 'ENTRY TIME',
+      'TARIKH KELUAR', 'EXIT DATE',
+      'MASA KELUAR', 'EXIT TIME',
+      'MUDA', 'LAMA', 'PERAM', 'DURA', 'MENGKAL', 'KOSONG', 
+      'PANJANG', 'BUSUK', 'KOTOR', 'S/TIKUS', 'P/T', 'BAS', 'MENG'
+    };
+    
+    final upperText = text.toUpperCase();
+    return knownFields.any((field) => upperText.contains(field));
+  }
+
+  // Helper function to check if a string contains any field name
+  bool containsAnyFieldName(String text, Map<String, List<String>> fieldMappings) {
+    final upperText = text.toUpperCase();
+    
+    for (final fieldNames in fieldMappings.values) {
+      for (final fieldName in fieldNames) {
+        if (upperText.contains(fieldName.toUpperCase())) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Optimized extractKeyFields function
+  Map<String, String> extractKeyFields(List<String> rawLines) {
+    final result = <String, String>{};
+    
+    // Define the key fields we need to extract with their possible variations
+    // Use a Map with String keys for better lookup performance
+    final keyFieldMappings = {
+      'NOMBOR KENDERAAN': ['NOMBOR KENDERAAN', 'NO. KENDERAAN', 'NO KENDERAAN', 'NOMBOR KENDERAAN :'],
+      'K.P. PEMANDU': ['K.P. PEMANDU', 'NO. K/P', 'IC NO', 'K.P PEMANDU', 'K.P. PEMANDU :'],
+      'NAMA PEMANDU': ['NAMA PEMANDU', 'NAMA PEMANDU :'],
+      'SYARIKAT': ['SYARIKAT', 'COMPANY', 'SYARIKAT :'],
+      'NOMBOR TRAILER': ['NOMBOR TRAILER', 'NO. TRAILER', 'TRAILER', 'NOMBOR TRAILER :'],
+      'NOTA HANTARAN/ARAHAN ANGKUT': ['NOTA HANTARAN/ARAHAN ANGKUT', 'NOTA HANTARAN', 'ARAHAN ANGKUT', 'NOTA HANTARAN :'],
+      'TARIKH MASUK': ['TARIKH MASUK', 'ENTRY DATE', 'TARIKH MASUK :'],
+      'MASA MASUK': ['MASA MASUK', 'ENTRY TIME', 'MASA MASUK :']
+    };
+  
+    // Initialize all fields to empty string at once
+    for (var key in keyFieldMappings.keys) {
+      result[key] = '';
+    }
+  
+    // Cache regular expressions for better performance
+    final vehicleRegex = RegExp(r'W[A-Z][0-9]{3,4}[A-Z]?');
+    final icRegex = RegExp(r'[0-9]{12}');
+    final dateRegex = RegExp(r'\d{2}/\d{2}/\d{4}');
+    final timeRegex = RegExp(r'\d{2}:\d{2}:\d{2}');
+    final deliveryNoteRegex = RegExp(r'^\d{4}$');
+    final trailerRegex = RegExp(r'T/[A-Z][0-9]{3,5}');
+  
+    // Convert raw lines to uppercase once for better performance
+    final upperLines = List<String>.generate(
+      rawLines.length, 
+      (index) => rawLines[index].toUpperCase()
+    );
+    
+    // First pass: Look for exact field:value patterns
+    for (int i = 0; i < rawLines.length; i++) {
+      final line = rawLines[i];
+      final upperLine = upperLines[i];
+      
+      // Scan each line for multiple field patterns at once
+      for (final field in keyFieldMappings.keys) {
+        for (final pattern in keyFieldMappings[field]!) {
+          final upperPattern = pattern.toUpperCase();
+          
+          // Case 1: Pattern followed by colon and value
+          final searchPattern = '$upperPattern:';
+          int patternIndex = upperLine.indexOf(searchPattern);
           if (patternIndex >= 0) {
-            final valueStartIdx = patternIndex + patternWithoutSpace.length;
+            final valueStartIdx = patternIndex + searchPattern.length;
             
             if (valueStartIdx < line.length) {
               final value = line.substring(valueStartIdx).trim();
@@ -508,507 +492,370 @@ Map<String, String> extractKeyFields(List<String> rawLines) {
               }
             }
           }
+          // Case 2: Pattern and colon are together without space
+          else {
+            final patternWithoutSpace = '${upperPattern.replaceAll(' :', ':')}:';
+            patternIndex = upperLine.indexOf(patternWithoutSpace);
+            if (patternIndex >= 0) {
+              final valueStartIdx = patternIndex + patternWithoutSpace.length;
+              
+              if (valueStartIdx < line.length) {
+                final value = line.substring(valueStartIdx).trim();
+                if (value.isNotEmpty) {
+                  result[field] = value;
+                  break;
+                }
+              }
+            }
+          }
         }
       }
     }
-  }
   
-  // Field-specific extraction for common patterns - use cached regex
-  
-  // Vehicle Number
-  if (result['NOMBOR KENDERAAN']!.isEmpty) {
-    for (final line in rawLines) {
-      final match = vehicleRegex.stringMatch(line);
-      if (match != null) {
-        result['NOMBOR KENDERAAN'] = match;
-        break;
+    // Field-specific extraction for common patterns - use cached regex
+    
+    // Vehicle Number
+    if (result['NOMBOR KENDERAAN']!.isEmpty) {
+      for (final line in rawLines) {
+        final match = vehicleRegex.stringMatch(line);
+        if (match != null) {
+          result['NOMBOR KENDERAAN'] = match;
+          break;
+        }
       }
     }
-  }
-  
-  // Driver IC
-  if (result['K.P. PEMANDU']!.isEmpty) {
-    for (final line in rawLines) {
-      final match = icRegex.stringMatch(line);
-      if (match != null) {
-        result['K.P. PEMANDU'] = match;
-        break;
+    
+    // Driver IC
+    if (result['K.P. PEMANDU']!.isEmpty) {
+      for (final line in rawLines) {
+        final match = icRegex.stringMatch(line);
+        if (match != null) {
+          result['K.P. PEMANDU'] = match;
+          break;
+        }
       }
     }
-  }
   
-  // Driver Name
-  if (result['NAMA PEMANDU']!.isEmpty) {
-    for (final line in rawLines) {
-      final upperLine = line.toUpperCase();
-      if ((upperLine.contains('BIN') || upperLine.contains('BINTI')) && !line.contains(':')) {
-        result['NAMA PEMANDU'] = line.trim();
-        break;
+    // Driver Name
+    if (result['NAMA PEMANDU']!.isEmpty) {
+      for (final line in rawLines) {
+        final upperLine = line.toUpperCase();
+        if ((upperLine.contains('BIN') || upperLine.contains('BINTI')) && !line.contains(':')) {
+          result['NAMA PEMANDU'] = line.trim();
+          break;
+        }
       }
     }
-  }
   
-  // Company
-  if (result['SYARIKAT']!.isEmpty) {
-    // First try direct match
-    bool syarikatFound = false;
-    for (final line in rawLines) {
-      if (line.toUpperCase().contains('SYARIKAT') && line.contains(':')) {
-        final colonPos = line.indexOf(':');
-        if (colonPos >= 0 && colonPos + 1 < line.length) {
-          final value = line.substring(colonPos + 1).trim();
-          if (value.contains('FELDA JENGKA')) {
-            result['SYARIKAT'] = value;
+    // Company
+    if (result['SYARIKAT']!.isEmpty) {
+      // First try direct match
+      bool syarikatFound = false;
+      for (final line in rawLines) {
+        if (line.toUpperCase().contains('SYARIKAT') && line.contains(':')) {
+          final colonPos = line.indexOf(':');
+          if (colonPos >= 0 && colonPos + 1 < line.length) {
+            final value = line.substring(colonPos + 1).trim();
+            if (value.contains('FELDA JENGKA')) {
+              result['SYARIKAT'] = value;
+              syarikatFound = true;
+              break;
+            }
+          }
+        }
+      }
+      
+      // If not found, try FELDA JENGKA pattern
+      if (!syarikatFound) {
+        for (final line in rawLines) {
+          if (line.contains('FELDA JENGKA 4') && 
+              !line.contains('PUSAT') && 
+              !line.contains('D/A') &&
+              !line.contains('Palm Industries')) {
+            
+            result['SYARIKAT'] = 'FELDA JENGKA 4';
             syarikatFound = true;
             break;
           }
         }
       }
-    }
     
-    // If not found, try FELDA JENGKA pattern
-    if (!syarikatFound) {
+      // Last resort - context search
+      if (!syarikatFound && rawLines.any((line) => line.contains('PENERIMAAN BTS FELDA/FPSB/FTP/FASSB'))) {
+        result['SYARIKAT'] = 'FELDA JENGKA 4';
+      }
+    }
+  
+    // Trailer Number
+    if (result['NOMBOR TRAILER']!.isEmpty) {
       for (final line in rawLines) {
-        if (line.contains('FELDA JENGKA 4') && 
-            !line.contains('PUSAT') && 
-            !line.contains('D/A') &&
-            !line.contains('Palm Industries')) {
-          
-          result['SYARIKAT'] = 'FELDA JENGKA 4';
-          syarikatFound = true;
+        if (line.contains('T/A') || trailerRegex.hasMatch(line)) {
+          final match = trailerRegex.stringMatch(line);
+          result['NOMBOR TRAILER'] = match ?? line.trim();
           break;
         }
       }
     }
-    
-    // Last resort - context search
-    if (!syarikatFound && rawLines.any((line) => line.contains('PENERIMAAN BTS FELDA/FPSB/FTP/FASSB'))) {
-      result['SYARIKAT'] = 'FELDA JENGKA 4';
-    }
-  }
   
-  // Trailer Number
-  if (result['NOMBOR TRAILER']!.isEmpty) {
-    for (final line in rawLines) {
-      if (line.contains('T/A') || trailerRegex.hasMatch(line)) {
-        final match = trailerRegex.stringMatch(line);
-        result['NOMBOR TRAILER'] = match ?? line.trim();
-        break;
-      }
-    }
-  }
-  
-  // Delivery Note
-  if (result['NOTA HANTARAN/ARAHAN ANGKUT']!.isEmpty) {
-    for (final line in rawLines) {
-      if (line.contains('NOTA') || line.contains('ARAHAN') || line.contains('HANTARAN')) {
-        if (line.contains(':')) {
-          final colonPos = line.indexOf(':');
-          final value = line.substring(colonPos + 1).trim();
-          if (value.isNotEmpty && RegExp(r'^\d+$').hasMatch(value)) {
-            result['NOTA HANTARAN/ARAHAN ANGKUT'] = value;
-            break;
-          }
-        }
-      }
-    }
-    
-    // If still empty, try a different approach
+    // Delivery Note
     if (result['NOTA HANTARAN/ARAHAN ANGKUT']!.isEmpty) {
       for (final line in rawLines) {
-        final trimmed = line.trim();
-        if (deliveryNoteRegex.hasMatch(trimmed)) {
-          result['NOTA HANTARAN/ARAHAN ANGKUT'] = trimmed;
-          break;
-        }
-      }
-    }
-  }
-  
-  // Entry Date and Time
-  bool entryDateFound = false;
-  bool entryTimeFound = false;
-  
-  for (final line in rawLines) {
-    final upperLine = line.toUpperCase();
-    
-    // Look for Entry Date
-    if (!entryDateFound && upperLine.contains('TARIKH MASUK')) {
-      if (line.contains(':')) {
-        final colonPos = line.indexOf(':');
-        final value = line.substring(colonPos + 1).trim();
-        
-        if (dateRegex.hasMatch(value)) {
-          result['TARIKH MASUK'] = dateRegex.stringMatch(value)!;
-          entryDateFound = true;
-        } else if (value.isNotEmpty) {
-          result['TARIKH MASUK'] = value;
-          entryDateFound = true;
-        }
-      }
-    } 
-    // Look for standalone date that might be entry date
-    else if (!entryDateFound && dateRegex.hasMatch(line) && !upperLine.contains('KELUAR')) {
-      result['TARIKH MASUK'] = dateRegex.stringMatch(line)!;
-      entryDateFound = true;
-    }
-    
-    // Look for Entry Time
-    if (!entryTimeFound && upperLine.contains('MASA MASUK')) {
-      if (line.contains(':')) {
-        final lastColonPos = line.lastIndexOf(':');
-        if (lastColonPos > upperLine.indexOf('MASA MASUK')) {
-          final value = line.substring(lastColonPos + 1).trim();
-          
-          if (timeRegex.hasMatch(value) || RegExp(r'\d{2}:\d{2}').hasMatch(value)) {
-            result['MASA MASUK'] = value;
-            entryTimeFound = true;
-          } else if (value.isNotEmpty) {
-            result['MASA MASUK'] = value;
-            entryTimeFound = true;
+        if (line.contains('NOTA') || line.contains('ARAHAN') || line.contains('HANTARAN')) {
+          if (line.contains(':')) {
+            final colonPos = line.indexOf(':');
+            final value = line.substring(colonPos + 1).trim();
+            if (value.isNotEmpty && RegExp(r'^\d+$').hasMatch(value)) {
+              result['NOTA HANTARAN/ARAHAN ANGKUT'] = value;
+              break;
+            }
           }
-        } else if (timeRegex.hasMatch(line)) {
-          result['MASA MASUK'] = timeRegex.stringMatch(line)!;
-          entryTimeFound = true;
         }
       }
-    } 
-    // Look for standalone time that might be entry time
-    else if (!entryTimeFound && 
-             line.contains(':') && 
-             timeRegex.hasMatch(line) && 
-             !upperLine.contains('TEL') && 
-             !upperLine.contains('FAX') &&
-             !upperLine.contains('KELUAR')) {
-      result['MASA MASUK'] = timeRegex.stringMatch(line)!;
-      entryTimeFound = true;
-    }
     
-    // Exit early if we found both date and time
-    if (entryDateFound && entryTimeFound) break;
-  }
-  
-  return result;
-}
-
-// Extract remaining fields to reduce complexity of the main function
-void _extractRemainingFields(List<String> rawLines, Map<String, String> result) {
-  // If SYARIKAT is still empty, look for context clues
-  if (result['SYARIKAT']!.isEmpty) {
-    for (int i = 0; i < rawLines.length; i++) {
-      if (rawLines[i].toUpperCase().contains('SYARIKAT')) {
-        // Check lines around it for FELDA JENGKA
-        final startIdx = math.max(0, i - 1);
-        final endIdx = math.min(rawLines.length - 1, i + 2);
-        
-        for (int j = startIdx; j <= endIdx; j++) {
-          if (rawLines[j].contains('FELDA JENGKA')) {
-            result['SYARIKAT'] = 'FELDA JENGKA 4';
-            debugPrint("Extracted SYARIKAT from context: ${result['SYARIKAT']}");
+      // If still empty, try a different approach
+      if (result['NOTA HANTARAN/ARAHAN ANGKUT']!.isEmpty) {
+        for (final line in rawLines) {
+          final trimmed = line.trim();
+          if (deliveryNoteRegex.hasMatch(trimmed)) {
+            result['NOTA HANTARAN/ARAHAN ANGKUT'] = trimmed;
             break;
           }
         }
       }
     }
-  }
   
-  // Last resort for SYARIKAT - hardcode if certain patterns are found
-  if (result['SYARIKAT']!.isEmpty && 
-      rawLines.any((line) => line.contains('PENERIMAAN BTS FELDA/FPSB/FTP/FASSB'))) {
-    result['SYARIKAT'] = 'FELDA JENGKA 4';
-    debugPrint("Extracted SYARIKAT with fallback: ${result['SYARIKAT']}");
-  }
-  
-  // For Trailer Number (usually starts with T/A)
-  if (result['NOMBOR TRAILER']!.isEmpty) {
-    final trailerRegex = RegExp(r'T/[A-Z][0-9]{3,5}');
-    for (final line in rawLines) {
-      if (line.contains('T/A') || trailerRegex.hasMatch(line)) {
-        final match = trailerRegex.stringMatch(line) ?? line.trim();
-        result['NOMBOR TRAILER'] = match;
-        debugPrint("Extracted trailer number: ${result['NOMBOR TRAILER']}");
-        break;
-      }
-    }
-  }
-  
-  // For Delivery Note (usually a numeric value)
-  if (result['NOTA HANTARAN/ARAHAN ANGKUT']!.isEmpty) {
-    for (final line in rawLines) {
-      if (line.contains('NOTA') || line.contains('ARAHAN') || line.contains('HANTARAN')) {
-        // Look for number after the field name
-        if (line.contains(':')) {
-          final colonPos = line.indexOf(':');
-          final value = line.substring(colonPos + 1).trim();
-          if (value.isNotEmpty && RegExp(r'^\d+$').hasMatch(value)) {
-            result['NOTA HANTARAN/ARAHAN ANGKUT'] = value;
-            debugPrint("Extracted delivery note: ${result['NOTA HANTARAN/ARAHAN ANGKUT']}");
-            break;
-          }
-        }
-      }
-    }
-  }
-  
-  // If still empty, look for numeric values that could be delivery notes
-  if (result['NOTA HANTARAN/ARAHAN ANGKUT']!.isEmpty) {
-    final deliveryNoteRegex = RegExp(r'^\d{4}$');
-    for (final line in rawLines) {
-      final trimmed = line.trim();
-      if (deliveryNoteRegex.hasMatch(trimmed)) {
-        result['NOTA HANTARAN/ARAHAN ANGKUT'] = trimmed;
-        debugPrint("Extracted delivery note from numeric pattern: ${result['NOTA HANTARAN/ARAHAN ANGKUT']}");
-        break;
-      }
-    }
-  }
-  
-  // Extract date fields with regex caching
-  _extractDateTimeFields(rawLines, result);
-}
-
-// Helper method to extract date and time fields
-void _extractDateTimeFields(List<String> rawLines, Map<String, String> result) {
-  final dateRegex = RegExp(r'\d{2}/\d{2}/\d{4}');
-  final timeRegex = RegExp(r'\d{2}:\d{2}:\d{2}');
-  
-  // For Entry Date (format: DD/MM/YYYY)
-  if (result['TARIKH MASUK']!.isEmpty) {
+    // Entry Date and Time
+    bool entryDateFound = false;
+    bool entryTimeFound = false;
+    
     for (final line in rawLines) {
       final upperLine = line.toUpperCase();
-      if (upperLine.contains('TARIKH MASUK')) {
+      
+      // Look for Entry Date
+      if (!entryDateFound && upperLine.contains('TARIKH MASUK')) {
         if (line.contains(':')) {
           final colonPos = line.indexOf(':');
           final value = line.substring(colonPos + 1).trim();
           
-          // Look for date pattern
           if (dateRegex.hasMatch(value)) {
             result['TARIKH MASUK'] = dateRegex.stringMatch(value)!;
-            debugPrint("Extracted TARIKH MASUK: ${result['TARIKH MASUK']}");
+            entryDateFound = true;
           } else if (value.isNotEmpty) {
             result['TARIKH MASUK'] = value;
-            debugPrint("Extracted TARIKH MASUK (raw): ${result['TARIKH MASUK']}");
+            entryDateFound = true;
           }
         }
-      } else if (dateRegex.hasMatch(line)) {
-        // Look for standalone date pattern
-        final date = dateRegex.stringMatch(line)!;
-        
-        // Check if this is likely an entry date (not an exit date)
-        if (!line.toUpperCase().contains('KELUAR')) {
-          result['TARIKH MASUK'] = date;
-          debugPrint("Extracted TARIKH MASUK from standalone pattern: ${result['TARIKH MASUK']}");
-        }
+      } 
+      // Look for standalone date that might be entry date
+      else if (!entryDateFound && dateRegex.hasMatch(line) && !upperLine.contains('KELUAR')) {
+        result['TARIKH MASUK'] = dateRegex.stringMatch(line)!;
+        entryDateFound = true;
       }
-    }
-  }
-  
-  // For Entry Time (format: HH:MM:SS)
-  if (result['MASA MASUK']!.isEmpty) {
-    for (final line in rawLines) {
-      final upperLine = line.toUpperCase();
-      if (upperLine.contains('MASA MASUK')) {
+    
+      // Look for Entry Time
+      if (!entryTimeFound && upperLine.contains('MASA MASUK')) {
         if (line.contains(':')) {
-          // Find the last colon which is likely after the field name
           final lastColonPos = line.lastIndexOf(':');
           if (lastColonPos > upperLine.indexOf('MASA MASUK')) {
             final value = line.substring(lastColonPos + 1).trim();
             
-            // Check if this looks like a time
             if (timeRegex.hasMatch(value) || RegExp(r'\d{2}:\d{2}').hasMatch(value)) {
               result['MASA MASUK'] = value;
-              debugPrint("Extracted MASA MASUK: ${result['MASA MASUK']}");
+              entryTimeFound = true;
             } else if (value.isNotEmpty) {
               result['MASA MASUK'] = value;
-              debugPrint("Extracted MASA MASUK (raw): ${result['MASA MASUK']}");
+              entryTimeFound = true;
             }
-          } else {
-            // Check if there's a time pattern in the line
-            if (timeRegex.hasMatch(line)) {
-              result['MASA MASUK'] = timeRegex.stringMatch(line)!;
-              debugPrint("Extracted MASA MASUK from full line: ${result['MASA MASUK']}");
-            }
+          } else if (timeRegex.hasMatch(line)) {
+            result['MASA MASUK'] = timeRegex.stringMatch(line)!;
+            entryTimeFound = true;
           }
         }
-      } else if (line.contains(':') && 
-                timeRegex.hasMatch(line) && 
-                !upperLine.contains('TEL') && 
-                !upperLine.contains('FAX') &&
-                !upperLine.contains('KELUAR')) {
-        // Find standalone time pattern that might be entry time
+      } 
+      // Look for standalone time that might be entry time
+      else if (!entryTimeFound && 
+              line.contains(':') && 
+              timeRegex.hasMatch(line) && 
+              !upperLine.contains('TEL') && 
+              !upperLine.contains('FAX') &&
+              !upperLine.contains('KELUAR')) {
         result['MASA MASUK'] = timeRegex.stringMatch(line)!;
-        debugPrint("Extracted MASA MASUK from standalone pattern: ${result['MASA MASUK']}");
+        entryTimeFound = true;
+      }
+      
+      // Exit early if we found both date and time
+      if (entryDateFound && entryTimeFound) break;
+    }
+    
+    return result;
+  }
+
+  // Optimized _processExtractedText function
+  void _processExtractedText(String text) {
+    final List<String> rawLines = text
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+
+    // Extract basic document information
+    String? companyName;
+    List<String> locationLines = [];
+    String? contactInfo;
+    String? gatePassTitle;
+    
+    // Use more efficient data structures
+    final Set<String> companyKeywords = {'FGV', 'Palm Industries'};
+    final Set<String> locationKeywords = {'PUSAT', 'FELDA', 'MARAN', 'PAHANG', 'D/A'};
+    final Set<String> contactKeywords = {'Tel', 'Fax'};
+    final Set<String> gatePassKeywords = {'GATEPASS', 'GATE PASS', 'G A T E P A S S', 'GAT EPA SS'};
+    
+    // Look for company name (usually in the first few lines)
+    for (int i = 0; i < math.min(5, rawLines.length); i++) {
+      if (companyKeywords.any((keyword) => rawLines[i].contains(keyword))) {
+        companyName = rawLines[i];
+        break;
       }
     }
-  }
-}
+  
+    // Extract location information with Set-based filtering
+    for (String line in rawLines) {
+      if (locationKeywords.any((keyword) => line.contains(keyword)) && 
+          !line.contains(':') && 
+          !line.contains('NOMBOR') && 
+          !line.contains('HANTARAN')) {
+        locationLines.add(line);
+      }
+    }
+    
+    // Extract contact information with Set-based filtering
+    for (String line in rawLines) {
+      if (contactKeywords.any((keyword) => line.contains(keyword))) {
+        contactInfo = line;
+        break;
+      }
+    }
+  
+    // Extract gate pass title with Set-based filtering
+    for (String line in rawLines) {
+      if (gatePassKeywords.any((keyword) => line.contains(keyword))) {
+        gatePassTitle = "GATEPASS"; // Normalize all variations
+        break;
+      }
+    }
 
- // Optimized _processExtractedText function
-void _processExtractedText(String text) {
-  final List<String> rawLines = text
-      .split('\n')
-      .map((line) => line.trim())
-      .where((line) => line.isNotEmpty)
-      .toList();
-
-  // Extract basic document information
-  String? companyName;
-  List<String> locationLines = [];
-  String? contactInfo;
-  String? gatePassTitle;
+    // Use optimized extraction for key fields
+    Map<String, String> keyFields = extractKeyFields(rawLines);
+    
+    // Process additional fields with improved efficiency
+    final Map<String, String> additionalFields = {
+      "MUDA": "",
+      "(P/T)": "",
+      "LAMA": "",
+      "PERAM": "",
+      "DURA": "",
+      "MENGKAL": "",
+      "KOSONG": "",
+      "PANJANG": "",
+      "BUSUK": "",
+      "KOTOR": "",
+      "S/TIKUS": "",
+      "B/A": ""
+    };
   
-  // Use more efficient data structures
-  final Set<String> companyKeywords = {'FGV', 'Palm Industries'};
-  final Set<String> locationKeywords = {'PUSAT', 'FELDA', 'MARAN', 'PAHANG', 'D/A'};
-  final Set<String> contactKeywords = {'Tel', 'Fax'};
-  final Set<String> gatePassKeywords = {'GATEPASS', 'GATE PASS', 'G A T E P A S S', 'GAT EPA SS'};
-  
-  // Look for company name (usually in the first few lines)
-  for (int i = 0; i < math.min(5, rawLines.length); i++) {
-    if (companyKeywords.any((keyword) => rawLines[i].contains(keyword))) {
-      companyName = rawLines[i];
-      break;
-    }
-  }
-  
-  // Extract location information with Set-based filtering
-  for (String line in rawLines) {
-    if (locationKeywords.any((keyword) => line.contains(keyword)) && 
-        !line.contains(':') && 
-        !line.contains('NOMBOR') && 
-        !line.contains('HANTARAN')) {
-      locationLines.add(line);
-    }
-  }
-  
-  // Extract contact information with Set-based filtering
-  for (String line in rawLines) {
-    if (contactKeywords.any((keyword) => line.contains(keyword))) {
-      contactInfo = line;
-      break;
-    }
-  }
-  
-  // Extract gate pass title with Set-based filtering
-  for (String line in rawLines) {
-    if (gatePassKeywords.any((keyword) => line.contains(keyword))) {
-      gatePassTitle = "GATEPASS"; // Normalize all variations
-      break;
-    }
-  }
-
-  // Use optimized extraction for key fields
-  Map<String, String> keyFields = extractKeyFields(rawLines);
-  
-  // Process additional fields with improved efficiency
-  final Map<String, String> additionalFields = {
-    "MUDA": "",
-    "(P/T)": "",
-    "LAMA": "",
-    "PERAM": "",
-    "DURA": "",
-    "MENGKAL": "",
-    "KOSONG": "",
-    "PANJANG": "",
-    "BUSUK": "",
-    "KOTOR": "",
-    "S/TIKUS": "",
-    "B/A": ""
-  };
-  
-  // Use a single pass approach for additional fields
-  final Set<String> fieldKeys = additionalFields.keys.toSet();
-  for (String line in rawLines) {
-    for (String key in fieldKeys) {
-      if (line.contains(key)) {
-        int keyIndex = line.indexOf(key);
-        if (keyIndex + key.length < line.length) {
-          String rest = line.substring(keyIndex + key.length).trim();
-          if (rest.startsWith(':')) {
-            String value = rest.substring(1).trim();
-            if (value.isNotEmpty) {
-              additionalFields[key] = value;
+    // Use a single pass approach for additional fields
+    final Set<String> fieldKeys = additionalFields.keys.toSet();
+    for (String line in rawLines) {
+      for (String key in fieldKeys) {
+        if (line.contains(key)) {
+          int keyIndex = line.indexOf(key);
+          if (keyIndex + key.length < line.length) {
+            String rest = line.substring(keyIndex + key.length).trim();
+            if (rest.startsWith(':')) {
+              String value = rest.substring(1).trim();
+              if (value.isNotEmpty) {
+                additionalFields[key] = value;
+              }
             }
           }
         }
       }
     }
-  }
   
-  // Create formatted output text with fewer allocations
-  List<String> headerLines = [];
-  List<String> editableKeyFields = [];
-  
-  // Add header info (non-editable)
-  headerLines.add(gatePassTitle ?? "GATEPASS");
-  headerLines.addAll(locationLines);
-  if (contactInfo != null) {
-    headerLines.add(contactInfo);
-  }
-  
-  // Add the key fields that will be editable - use more efficient StringBuilder pattern
-  final keyFieldNames = [
-    "NOMBOR KENDERAAN",
-    "K.P. PEMANDU",
-    "NAMA PEMANDU",
-    "SYARIKAT",
-    "NOMBOR TRAILER",
-    "NOTA HANTARAN/ARAHAN ANGKUT"
-  ];
-  
-  for (String fieldName in keyFieldNames) {
-    editableKeyFields.add("$fieldName: ${keyFields[fieldName] ?? ''}");
-  }
-  
-  // Extract and add dates and times
-  String entryDate = keyFields['TARIKH MASUK'] ?? "";
-  String entryTime = keyFields['MASA MASUK'] ?? "";
-  String exitDate = "", exitTime = "";
-  
-  editableKeyFields.add("TARIKH MASUK: $entryDate");
-  editableKeyFields.add("MASA MASUK: $entryTime");
-  editableKeyFields.add("TARIKH KELUAR: $exitDate");
-  editableKeyFields.add("MASA KELUAR: $exitTime");
-  
-  // Add additional fields
-  for (MapEntry<String, String> entry in additionalFields.entries) {
-    editableKeyFields.add("${entry.key}: ${entry.value}");
-  }
-  
-  // Create DocumentData object with the extracted information
-  _documentData = DocumentData(
-    companyName: companyName,
-    location: locationLines.join('\n'),
-    contactInfo: contactInfo,
-    vehicleNumber: keyFields['NOMBOR KENDERAAN'],
-    driverIc: keyFields['K.P. PEMANDU'],
-    driverName: keyFields['NAMA PEMANDU'], 
-    company: keyFields['SYARIKAT'],
-    trailerNumber: keyFields['NOMBOR TRAILER'],
-    deliveryNote: keyFields['NOTA HANTARAN/ARAHAN ANGKUT'],
-    entryDate: entryDate,
-    entryTime: entryTime,
-    exitDate: exitDate,
-    exitTime: exitTime,
-    additionalFields: additionalFields,
-  );
-  
-  // Combine header and key fields for complete text
-  setState(() {
-    _extractedText = [...headerLines, ...editableKeyFields].join('\n');
+    // Create formatted output text with fewer allocations
+    List<String> headerLines = [];
+    List<String> editableKeyFields = [];
     
-    // Create text controllers with fewer allocations
-    _headerTextControllers = List.generate(
-      headerLines.length, 
-      (index) => TextEditingController(text: headerLines[index])
-    );
+    // Add header info (non-editable)
+    headerLines.add(gatePassTitle ?? "GATEPASS");
+    headerLines.addAll(locationLines);
+    if (contactInfo != null) {
+      headerLines.add(contactInfo);
+    }
     
-    _editableTextControllers = List.generate(
-      editableKeyFields.length, 
-      (index) => TextEditingController(text: editableKeyFields[index])
+    // Add the key fields that will be editable - use more efficient StringBuilder pattern
+    final keyFieldNames = [
+      "NOMBOR KENDERAAN",
+      "K.P. PEMANDU",
+      "NAMA PEMANDU",
+      "SYARIKAT",
+      "NOMBOR TRAILER",
+      "NOTA HANTARAN/ARAHAN ANGKUT"
+    ];
+    
+    for (String fieldName in keyFieldNames) {
+      editableKeyFields.add("$fieldName: ${keyFields[fieldName] ?? ''}");
+    }
+  
+    // Extract and add dates and times
+    String entryDate = keyFields['TARIKH MASUK'] ?? "";
+    String entryTime = keyFields['MASA MASUK'] ?? "";
+    String exitDate = "", exitTime = "";
+    
+    editableKeyFields.add("TARIKH MASUK: $entryDate");
+    editableKeyFields.add("MASA MASUK: $entryTime");
+    editableKeyFields.add("TARIKH KELUAR: $exitDate");
+    editableKeyFields.add("MASA KELUAR: $exitTime");
+    
+    // Add additional fields
+    for (MapEntry<String, String> entry in additionalFields.entries) {
+      editableKeyFields.add("${entry.key}: ${entry.value}");
+    }
+  
+    // Create DocumentData object with the extracted information
+    _documentData = DocumentData(
+      companyName: companyName,
+      location: locationLines.join('\n'),
+      contactInfo: contactInfo,
+      vehicleNumber: keyFields['NOMBOR KENDERAAN'],
+      driverIc: keyFields['K.P. PEMANDU'],
+      driverName: keyFields['NAMA PEMANDU'], 
+      company: keyFields['SYARIKAT'],
+      trailerNumber: keyFields['NOMBOR TRAILER'],
+      deliveryNote: keyFields['NOTA HANTARAN/ARAHAN ANGKUT'],
+      entryDate: entryDate,
+      entryTime: entryTime,
+      exitDate: exitDate,
+      exitTime: exitTime,
+      additionalFields: additionalFields,
     );
-  });
-}
+  
+    // Combine header and key fields for complete text
+    setState(() {
+      _extractedText = [...headerLines, ...editableKeyFields].join('\n');
+      
+      // Create text controllers with fewer allocations
+      _headerTextControllers = List.generate(
+        headerLines.length, 
+        (index) => TextEditingController(text: headerLines[index])
+      );
+      
+      _editableTextControllers = List.generate(
+        editableKeyFields.length, 
+        (index) => TextEditingController(text: editableKeyFields[index])
+      );
+    });
+  }
 
   void _copyToClipboard() {
     if (_extractedText != null && _extractedText!.isNotEmpty) {
@@ -1074,43 +921,44 @@ void _processExtractedText(String text) {
   }
 
   // Optimized _updateFieldValue function using copyWith
-void _updateFieldValue(String fieldName, String value) {
-  if (_documentData == null) return;
-  
-  // Map the field name to the correct property in DocumentData
-  switch (fieldName.toUpperCase()) {
-    case 'NOMBOR KENDERAAN':
-      _documentData = _documentData!.copyWith(vehicleNumber: value);
-      break;
-    case 'K.P PEMANDU':
-    case 'K.P. PEMANDU':
-      _documentData = _documentData!.copyWith(driverIc: value);
-      break;
-    case 'NAMA PEMANDU':
-      _documentData = _documentData!.copyWith(driverName: value);
-      break;
-    case 'SYARIKAT':
-      _documentData = _documentData!.copyWith(company: value);
-      break;  
-    case 'NOMBOR TRAILER':
-      _documentData = _documentData!.copyWith(trailerNumber: value);
-      break;  
-    case 'NOTA HANTARAN/ARAHAN ANGKUT':
-      _documentData = _documentData!.copyWith(deliveryNote: value);
-      break;
-    case 'TARIKH MASUK':
-      _documentData = _documentData!.copyWith(entryDate: value);
-      break;
-    case 'MASA MASUK':
-      _documentData = _documentData!.copyWith(entryTime: value);
-      break;
-    case 'TARIKH KELUAR':
-      _documentData = _documentData!.copyWith(exitDate: value);
-      break;
-    case 'MASA KELUAR':
-      _documentData = _documentData!.copyWith(exitTime: value);
-      break;      
-    default:
+  void _updateFieldValue(String fieldName, String value) {
+    if (_documentData == null) return;
+    
+    // Map the field name to the correct property in DocumentData
+    switch (fieldName.toUpperCase()) {
+      case 'NOMBOR KENDERAAN':
+        _documentData = _documentData!.copyWith(vehicleNumber: value);
+        break;
+      case 'K.P PEMANDU':
+      case 'K.P. PEMANDU':
+        _documentData = _documentData!.copyWith(driverIc: value);
+        break;
+      case 'NAMA PEMANDU':
+        _documentData = _documentData!.copyWith(driverName: value);
+        break;
+      case 'SYARIKAT':
+        _documentData = _documentData!.copyWith(company: value);
+        break;  
+      case 'NOMBOR TRAILER':
+        _documentData = _documentData!.copyWith(trailerNumber: value);
+        break;  
+      case 'NOTA HANTARAN/ARAHAN ANGKUT':
+        _documentData = _documentData!.copyWith(deliveryNote: value);
+        break;
+      case 'TARIKH MASUK':
+        _documentData = _documentData!.copyWith(entryDate: value);
+        break;
+      case 'MASA MASUK':
+        _documentData = _documentData!.copyWith(entryTime: value);
+        break;
+      case 'TARIKH KELUAR':
+        _documentData = _documentData!.copyWith(exitDate: value);
+        break;
+      case 'MASA KELUAR':
+        _documentData = _documentData!.copyWith(exitTime: value);
+        break;      
+      default:
+
       // Handle additional fields
       if (_documentData!.additionalFields.containsKey(fieldName)) {
         Map<String, String> updatedFields = Map.from(_documentData!.additionalFields);
@@ -1120,94 +968,72 @@ void _updateFieldValue(String fieldName, String value) {
         );
       }
       break;
+    }
   }
-}
 
   @override
-Widget build(BuildContext context) {
-  return Scaffold(
-    appBar: AppBar(
-      title: Text(widget.title),
-      actions: [
-        if (_extractedText != null && _extractedText!.isNotEmpty)
-          IconButton(
-            icon: const Icon(Icons.copy),
-            onPressed: _copyToClipboard,
-            tooltip: 'Copy text',
-          ),
-        if (_documentData != null)
-          IconButton(
-            icon: const Icon(Icons.save_alt),
-            onPressed: _saveAsJson,
-            tooltip: 'Save as JSON',
-          ),
-      ],
-    ),
-    body: SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              Center(
-                child: SizedBox(
-                  width: 180, // adjust width as needed
-                  height: 45, // adjust height as needed
-                  child: ElevatedButton.icon(
-                    onPressed: _pickImage,
-                    icon: const Icon(Icons.document_scanner),
-                    label: const Text('Scan Document'),
-                    style: ElevatedButton.styleFrom(
-                      textStyle: const TextStyle(fontSize: 14),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          
-          if (_file != null && _isImage)
-            Container(
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade400),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                    child: Image.file(_file!, fit: BoxFit.cover),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Text(
-                      'File: $_fileName',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          if (_extractedText != null && _extractedText!.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.copy),
+              onPressed: _copyToClipboard,
+              tooltip: 'Copy text',
+            ),
+          if (_documentData != null)
+            IconButton(
+              icon: const Icon(Icons.save_alt),
+              onPressed: _saveAsJson,
+              tooltip: 'Save as JSON',
+            ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Center(
+                  child: SizedBox(
+                    width: 180, // adjust width as needed
+                    height: 45, // adjust height as needed
+                    child: ElevatedButton.icon(
+                      onPressed: _pickImage,
+                      icon: const Icon(Icons.document_scanner),
+                      label: const Text('Scan Document'),
+                      style: ElevatedButton.styleFrom(
+                        textStyle: const TextStyle(fontSize: 14),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
+            const SizedBox(height: 16),
           
-          if (_file != null && !_isImage)
-            Card(
-              margin: const EdgeInsets.only(bottom: 16),
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Row(
+            if (_file != null && _isImage)
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.picture_as_pdf, size: 28, color: Colors.red),
-                    const SizedBox(width: 12),
-                    Expanded(
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                      child: Image.file(_file!, fit: BoxFit.cover),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
                       child: Text(
                         'File: $_fileName',
                         style: const TextStyle(
@@ -1219,183 +1045,205 @@ Widget build(BuildContext context) {
                   ],
                 ),
               ),
-            ),
           
-          if (_isProcessing)
-            const Center(
-              child: Column(
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text("Processing document..."),
-                ],
-              ),
-            )
-          else if (_headerTextControllers.isNotEmpty || _editableTextControllers.isNotEmpty) ...[
-            // Combined container for both header and key fields
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: Colors.black),
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.3),
-                    spreadRadius: 1,
-                    blurRadius: 3,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header section
-                  if (_headerTextControllers.isNotEmpty) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(
-                        //color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(4),
+            if (_file != null && !_isImage)
+              Card(
+                margin: const EdgeInsets.only(bottom: 16),
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.picture_as_pdf, size: 28, color: Colors.red),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'File: $_fileName',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
                       ),
-                      alignment: Alignment.center,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: List.generate(_headerTextControllers.length, (index) {
-                          return Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
-                            child: Text(
-                              _headerTextControllers[index].text,
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: index == 0 ? FontWeight.bold : FontWeight.normal,
-                                color: index == 0 ? Colors.deepPurple : Colors.black87,
+                    ],
+                  ),
+                ),
+              ),
+          
+            if (_isProcessing)
+              const Center(
+                child: Column(
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text("Processing document..."),
+                  ],
+                ),
+              )
+            else if (_headerTextControllers.isNotEmpty || _editableTextControllers.isNotEmpty) ...[
+              // Combined container for both header and key fields
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: Colors.black),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.3),
+                      spreadRadius: 1,
+                      blurRadius: 3,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header section
+                    if (_headerTextControllers.isNotEmpty) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          //color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        alignment: Alignment.center,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: List.generate(_headerTextControllers.length, (index) {
+                            return Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
+                              child: Text(
+                                _headerTextControllers[index].text,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: index == 0 ? FontWeight.bold : FontWeight.normal,
+                                  color: index == 0 ? Colors.deepPurple : Colors.black87,
+                                ),
+                                textAlign: TextAlign.center,
                               ),
-                              textAlign: TextAlign.center,
+                            );
+                          }),
+                        ),
+                      ),
+                      const Divider(thickness: 1.5, color: Colors.black45),
+                    ],
+                  
+                    // Key fields section
+                    if (_editableTextControllers.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Column(
+                        children: List.generate(_editableTextControllers.length, (index) {
+                          // Parse the text to separate label and value
+                          String fullText = _editableTextControllers[index].text;
+                          int colonIndex = fullText.indexOf(':');
+                          String label = colonIndex > 0 ? fullText.substring(0, colonIndex + 1) : fullText;
+                          String value = colonIndex > 0 && colonIndex + 1 < fullText.length ? 
+                              fullText.substring(colonIndex + 1).trim() : "";
+                          
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6.0),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                // Non-editable label
+                                Expanded(
+                                  flex: 2,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade200,
+                                      border: Border.all(color: Colors.grey.shade400),
+                                      borderRadius: const BorderRadius.horizontal(left: Radius.circular(4)),
+                                    ),
+                                    child: Text(
+                                      label,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // Editable value
+                                Expanded(
+                                  flex: 3,
+                                  child: TextFormField(
+                                    initialValue: value,
+                                    onChanged: (newValue) {
+                                      // Update the corresponding value in the document data
+                                      _updateFieldValue(label.trim().replaceAll(':', ''), newValue);
+                                    },
+                                    decoration: InputDecoration(
+                                      border: const OutlineInputBorder(
+                                        borderRadius: BorderRadius.horizontal(right: Radius.circular(4)),
+                                      ),
+                                      contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                    ),
+                                    style: const TextStyle(fontSize: 15),
+                                  ),
+                                ),
+                              ],
                             ),
                           );
                         }),
                       ),
-                    ),
-                    const Divider(thickness: 1.5, color: Colors.black45),
+                    ],
                   ],
-                  
-                  // Key fields section
-                  if (_editableTextControllers.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Column(
-                      children: List.generate(_editableTextControllers.length, (index) {
-                        // Parse the text to separate label and value
-                        String fullText = _editableTextControllers[index].text;
-                        int colonIndex = fullText.indexOf(':');
-                        String label = colonIndex > 0 ? fullText.substring(0, colonIndex + 1) : fullText;
-                        String value = colonIndex > 0 && colonIndex + 1 < fullText.length ? 
-                            fullText.substring(colonIndex + 1).trim() : "";
-                        
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6.0),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              // Non-editable label
-                              Expanded(
-                                flex: 2,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade200,
-                                    border: Border.all(color: Colors.grey.shade400),
-                                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(4)),
-                                  ),
-                                  child: Text(
-                                    label,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              // Editable value
-                              Expanded(
-                                flex: 3,
-                                child: TextFormField(
-                                  initialValue: value,
-                                  onChanged: (newValue) {
-                                    // Update the corresponding value in the document data
-                                    _updateFieldValue(label.trim().replaceAll(':', ''), newValue);
-                                  },
-                                  decoration: InputDecoration(
-                                    border: const OutlineInputBorder(
-                                      borderRadius: BorderRadius.horizontal(right: Radius.circular(4)),
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                                    filled: true,
-                                    fillColor: Colors.white,
-                                  ),
-                                  style: const TextStyle(fontSize: 15),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            if (_documentData != null) ...[
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: _saveAsJson,
-                icon: const Icon(Icons.save),
-                label: const Text('Save to JSON'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-                  textStyle: const TextStyle(fontSize: 16),
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
                 ),
               ),
-            ]
-          ] else ...[
-            const Center(
-              child: Text('No text extracted yet. Scan a document.'),
-            )
+              if (_documentData != null) ...[
+                const SizedBox(height: 20),
+                ElevatedButton.icon(
+                  onPressed: _saveAsJson,
+                  icon: const Icon(Icons.save),
+                  label: const Text('Save to JSON'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                    textStyle: const TextStyle(fontSize: 16),
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ]
+            ] else ...[
+              const Center(
+                child: Text('No text extracted yet. Scan a document.'),
+              )
+            ],
           ],
-        ],
+        ),
       ),
-    ),
-    floatingActionButton: _extractedText != null && _extractedText!.isNotEmpty
-      ? Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FloatingActionButton(
-            onPressed: _copyToClipboard,
-            tooltip: 'Copy Text',
-            heroTag: 'copy',
-            child: const Icon(Icons.content_copy),
-          ),
-          const SizedBox(height: 16),
-          FloatingActionButton(
-            onPressed: _saveAsJson,
-            tooltip: 'Save as JSON',
-            heroTag: 'json',
-            backgroundColor: Colors.green,
-            child: const Icon(Icons.code),
-          ),
-        ],
-      )
-    : null,
-  );
-}
+      floatingActionButton: _extractedText != null && _extractedText!.isNotEmpty
+        ? Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FloatingActionButton(
+              onPressed: _copyToClipboard,
+              tooltip: 'Copy Text',
+              heroTag: 'copy',
+              child: const Icon(Icons.content_copy),
+            ),
+            const SizedBox(height: 16),
+            FloatingActionButton(
+              onPressed: _saveAsJson,
+              tooltip: 'Save as JSON',
+              heroTag: 'json',
+              backgroundColor: Colors.green,
+              child: const Icon(Icons.code),
+            ),
+          ],
+        )
+      : null,
+    );
   }
+}
 
 // Helper function to check if a string contains any field name
 bool containsAnyFieldName(String text, Map<String, List<String>> fieldMappings) {
